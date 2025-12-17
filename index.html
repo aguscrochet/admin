@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Pedidos PRO 🧶</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #E6E6FA;
+            padding: 20px;
+            margin: 0;
+            color: #333;
+        }
+
+        h1 { text-align: center; color: #5D4037; }
+
+        /* BOTONES DE RESPALDO */
+        .backup-area {
+            text-align: right;
+            margin-bottom: 10px;
+        }
+
+        .btn-backup {
+            background-color: #607D8B;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        
+        .btn-backup:hover { background-color: #455A64; }
+
+        /* INPUTS Y FORMULARIO */
+        .input-group {
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            border: 2px solid #FFEB3B;
+        }
+
+        input, select {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            flex-grow: 1;
+        }
+
+        /* Hacemos que el campo de pedido sea un poco más largo */
+        #desc { flex-grow: 2; }
+
+        button#btn-agregar {
+            background-color: #25D366;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* TABLA */
+        .table-container { overflow-x: auto; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        th { background-color: #5D4037; color: white; padding: 10px; text-align: left; font-size: 14px; }
+        td { padding: 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+
+        .status-pagado { background-color: #d4edda; color: #155724; font-weight: bold; padding: 5px; border-radius: 5px; text-align: center; cursor: pointer; }
+        .status-pendiente { background-color: #f8d7da; color: #721c24; font-weight: bold; padding: 5px; border-radius: 5px; text-align: center; cursor: pointer; }
+        .entrega-badge { font-weight: bold; color: #555; }
+        
+        .btn-delete { background: #ff4d4d; color: white; border: none; border-radius: 50%; width: 25px; height: 25px; cursor: pointer; }
+
+        .summary { margin-top: 20px; background: white; padding: 15px; border-radius: 10px; text-align: center; font-weight: bold; color: #5D4037; }
+    </style>
+</head>
+<body>
+
+    <div class="backup-area">
+        <button class="btn-backup" onclick="descargarCopia()">⬇️ Guardar Copia</button>
+        <button class="btn-backup" onclick="document.getElementById('file-input').click()">⬆️ Cargar Copia</button>
+        <input type="file" id="file-input" style="display: none;" onchange="cargarCopia(this)">
+    </div>
+
+    <h1>📋 Mis Pedidos</h1>
+
+    <div class="input-group">
+        <input type="text" id="cliente" placeholder="Nombre Cliente (Ej: Marta)">
+        
+        <input type="text" id="desc" placeholder="¿Qué pidió?">
+        <input type="date" id="fecha">
+        <input type="number" id="monto" placeholder="Precio $$">
+        <select id="entrega">
+            <option value="Retira">🙋‍♀️ Retira</option>
+            <option value="Envío">🛵 Envío</option>
+        </select>
+        <select id="metodo">
+            <option value="Efectivo">Efectivo 💵</option>
+            <option value="Transferencia">Transferencia 🏦</option>
+        </select>
+        <select id="estado">
+            <option value="pendiente">❌ Debe</option>
+            <option value="pagado">✅ Pagado</option>
+        </select>
+        <button id="btn-agregar" onclick="agregarPedido()">AGREGAR PEDIDO</button>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Cliente</th> <th>Pedido</th>
+                    <th>Entrega</th>
+                    <th>$$</th>
+                    <th>Pago</th>
+                    <th>Estado</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="lista-pedidos"></tbody>
+        </table>
+    </div>
+
+    <div class="summary">
+        💰 Por Cobrar: <span id="total-pendiente" style="color: red;">$0</span>
+    </div>
+
+    <script>
+        let pedidos = JSON.parse(localStorage.getItem('misPedidosPatitos')) || [];
+
+        function renderizar() {
+            const tbody = document.getElementById('lista-pedidos');
+            tbody.innerHTML = '';
+            let totalDeuda = 0;
+
+            pedidos.sort((a, b) => new Date(a.fecha) - new Date(b.fecha));
+
+            pedidos.forEach((p, index) => {
+                if(p.estado === 'pendiente') totalDeuda += parseFloat(p.monto);
+                if(!p.entrega) p.entrega = "Retira";
+                // Si es un pedido viejo sin nombre, ponemos un guión
+                if(!p.cliente) p.cliente = "-"; 
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatearFecha(p.fecha)}</td>
+                    <td><strong>${p.cliente}</strong></td> <td>${p.desc}</td>
+                    <td class="entrega-badge">${p.entrega === 'Envío' ? '🛵 Envío' : '🙋‍♀️ Retira'}</td>
+                    <td>$${p.monto}</td>
+                    <td>${p.metodo}</td>
+                    <td><div class="${p.estado === 'pagado' ? 'status-pagado' : 'status-pendiente'}" onclick="cambiarEstado(${index})">${p.estado === 'pagado' ? 'PAGADO' : 'FALTA'}</div></td>
+                    <td><button class="btn-delete" onclick="borrar(${index})">x</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+            document.getElementById('total-pendiente').innerText = `$${totalDeuda}`;
+            localStorage.setItem('misPedidosPatitos', JSON.stringify(pedidos));
+        }
+
+        function agregarPedido() {
+            const cliente = document.getElementById('cliente').value; // NUEVO
+            const desc = document.getElementById('desc').value;
+            const fecha = document.getElementById('fecha').value;
+            const monto = document.getElementById('monto').value;
+            const entrega = document.getElementById('entrega').value;
+            const metodo = document.getElementById('metodo').value;
+            const estado = document.getElementById('estado').value;
+
+            // Validamos que pongan el nombre también
+            if (cliente === '' || desc === '' || fecha === '' || monto === '') { 
+                alert("¡Faltan datos! Recuerda poner el nombre 😉"); 
+                return; 
+            }
+
+            pedidos.push({ cliente, desc, fecha, monto, entrega, metodo, estado });
+            
+            // Limpiar inputs
+            document.getElementById('cliente').value = '';
+            document.getElementById('desc').value = '';
+            document.getElementById('monto').value = '';
+            
+            renderizar();
+        }
+
+        function borrar(index) { if(confirm('¿Borrar?')) { pedidos.splice(index, 1); renderizar(); } }
+        function cambiarEstado(index) { pedidos[index].estado = (pedidos[index].estado === 'pendiente') ? 'pagado' : 'pendiente'; renderizar(); }
+        function formatearFecha(f) { if(!f) return "--/--"; const p = f.split('-'); return `${p[2]}/${p[1]}`; }
+
+        /* --- RESPALDO --- */
+        function descargarCopia() {
+            const datos = JSON.stringify(pedidos); 
+            const blob = new Blob([datos], {type: "application/json"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "respaldo-pedidos.json"; 
+            a.click();
+        }
+
+        function cargarCopia(input) {
+            const archivo = input.files[0];
+            if (!archivo) return;
+            const lector = new FileReader();
+            lector.onload = function(e) {
+                try {
+                    const datosCargados = JSON.parse(e.target.result);
+                    if(confirm(`Se encontraron ${datosCargados.length} pedidos. ¿Restaurar copia?`)) {
+                        pedidos = datosCargados; 
+                        renderizar(); 
+                        alert("¡Listo! Datos recuperados 🎉");
+                    }
+                } catch (error) { alert("Archivo dañado 😢"); }
+            };
+            lector.readAsText(archivo);
+        }
+
+        renderizar();
+    </script>
+
+</body>
+</html>
